@@ -12,7 +12,6 @@ blogger2ghost <pathtobloggerexportfile> <outputrootfolder>
 ##V0.2
 * Results are now output to a folder of the form `B2G_yyyyMMdd_HHmmss` underneath the output folder
 * Images are now placed in a folder called `images` underneath this
-* 
 
 ##V0.1
 
