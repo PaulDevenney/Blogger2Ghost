@@ -1,7 +1,10 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Data.SqlTypes;
 using System.IO;
 using System.Linq;
+using System.Net;
+using System.Text.RegularExpressions;
 using System.Xml.Linq;
 using Newtonsoft.Json;
 using Slugify;
@@ -11,6 +14,7 @@ namespace Blogger2Ghost
     class Program
     {
         private static SlugHelper _slugifyHelper;
+        private static Dictionary<string, string> _downloadImages = new Dictionary<string, string>();
 
         static void Main(string[] args)
         {
@@ -21,11 +25,16 @@ namespace Blogger2Ghost
 
             if (args.Length != 2)
             {
-                Console.WriteLine("Usage: Blogger2Ghost <bloggerexport.xml> <ghostimport.json>");
+                Console.WriteLine("Usage: Blogger2Ghost <bloggerexport.xml> <outputfolder>");
             }
 
             var bloggerXmlFile = args[0]; //@"C:\Users\Paul\Downloads\blog-04-23-2016.xml"
-            var ghostOutputFile = args[1]; //ghost.json
+            var ghostOutputFolder = args[1]; //"ghost.json"
+
+            //var bloggerXmlFile = @"C:\Users\Paul\Downloads\blog-04-23-2016.xml";
+            //var ghostOutputFolder = ".";
+
+            ghostOutputFolder = CleanseFolderPath(ghostOutputFolder);
 
             var slugConfig = new SlugHelper.Config
             {
@@ -92,7 +101,27 @@ namespace Blogger2Ghost
             }
 
             var json = JsonConvert.SerializeObject(ghostImport);
-            File.WriteAllText(ghostOutputFile, json);
+            var targetDirectory = ghostOutputFolder + "B2G_" + DateTime.UtcNow.ToString("yyyyMMdd_HHmmss") + "\\";
+            Directory.CreateDirectory(targetDirectory);
+            File.WriteAllText(targetDirectory + "ghost.json", json);
+            var imagesDirectory = targetDirectory + "images\\";
+            Directory.CreateDirectory(imagesDirectory);
+
+            foreach (var downloadImage in _downloadImages)
+            {
+                WebClient client = new WebClient();
+                client.DownloadFile(downloadImage.Key, imagesDirectory+downloadImage.Value);
+            }
+        }
+
+        private static string CleanseFolderPath(string ghostOutputFolder)
+        {
+            if (!ghostOutputFolder.EndsWith("\\"))
+            {
+                ghostOutputFolder += "\\";
+            }
+
+            return ghostOutputFolder;
         }
 
         private static Post CreatePostFromElement(int postId, XElement element)
@@ -104,6 +133,8 @@ namespace Blogger2Ghost
             var published = element.Elements().Single(e => e.Name.LocalName == "published").Value;
             var updated = element.Elements().Single(e => e.Name.LocalName == "updated").Value;
             var content = element.Elements().Single(e => e.Name.LocalName == "content").Value;
+
+            content = CleanContent(content);
 
             var publishedEpoch = DateTime.Parse(published).ToEpochTimeInMilliseconds();
             var updatedEpoch = DateTime.Parse(updated).ToEpochTimeInMilliseconds();
@@ -136,6 +167,24 @@ namespace Blogger2Ghost
             };
 
             return post;
+        }
+
+        private static string CleanContent(string content)
+        {
+            var imageRegex = new Regex("<img.+?src=[\"'](.+?)[\"'].*?>(?:\\s*?</img>)?");
+            var breakRegex = new Regex("<br\\s?/>");
+
+            var result = imageRegex.Replace(content, Evaluator);
+            result = breakRegex.Replace(result, "\n");
+            return result;
+        }
+
+        private static string Evaluator(Match match)
+        {
+            var src = match.Groups[1].Value;
+            var imageName = src.Split('/').Last();
+            _downloadImages.Add(src, imageName);
+            return $"![{imageName}](/content/images/fromblogger/{imageName})";
         }
 
         private static BlogStatus GetPublishingStatus(XElement element)
