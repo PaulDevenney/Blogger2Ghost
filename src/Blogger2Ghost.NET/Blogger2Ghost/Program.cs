@@ -28,11 +28,11 @@ namespace Blogger2Ghost
                 Console.WriteLine("Usage: Blogger2Ghost <bloggerexport.xml> <outputfolder>");
             }
 
-            var bloggerXmlFile = args[0]; //@"C:\Users\Paul\Downloads\blog-04-23-2016.xml"
-            var ghostOutputFolder = args[1]; //"ghost.json"
+            //var bloggerXmlFile = args[0]; //@"C:\Users\Paul\Downloads\blog-04-23-2016.xml"
+            //var ghostOutputFolder = args[1]; //"ghost.json"
 
-            //var bloggerXmlFile = @"C:\Users\Paul\Downloads\blog-04-23-2016.xml";
-            //var ghostOutputFolder = ".";
+            var bloggerXmlFile = @"C:\Users\Paul\Downloads\blog-04-23-2016.xml";
+            var ghostOutputFolder = ".";
 
             ghostOutputFolder = CleanseFolderPath(ghostOutputFolder);
 
@@ -171,15 +171,25 @@ namespace Blogger2Ghost
 
         private static string CleanContent(string content)
         {
+            var bloggerImageRegex =new Regex("<div.+?class=\"separator\".*?>.+?src=[\"'](.+?)[\"'].+?(?:.*</div>)?");
             var imageRegex = new Regex("<img.+?src=[\"'](.+?)[\"'].*?>(?:\\s*?</img>)?");
             var breakRegex = new Regex("<br\\s?/>");
 
-            var result = imageRegex.Replace(content, Evaluator);
+            var result = bloggerImageRegex.Replace(content, BloggerImageEvaluator);
+            result = imageRegex.Replace(result, StandardImageEvaluator);
             result = breakRegex.Replace(result, "\n");
             return result;
         }
 
-        private static string Evaluator(Match match)
+        private static string BloggerImageEvaluator(Match match)
+        {
+            var src = match.Groups[1].Value;
+            var imageName = src.Split('/').Last();
+            _downloadImages.Add(src, imageName);
+            return $"![{imageName}](/content/images/fromblogger/{imageName})";
+        }
+
+        private static string StandardImageEvaluator(Match match)
         {
             var src = match.Groups[1].Value;
             var imageName = src.Split('/').Last();
